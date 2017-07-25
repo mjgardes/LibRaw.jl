@@ -1,4 +1,4 @@
-using LibRaw
+using LibRaw: libraw_version, LibRawImage
 using AxisArrays
 using Base.Test
 
@@ -14,9 +14,9 @@ end
     @test LibRaw.make(image) == "Samsung"
     @test LibRaw.model(image) == "SM-G930F"
     @test LibRaw.color_description(image) == "RGBG"
-    @test LibRaw.raw_size(image) == (4032, 2268)
-    @test LibRaw.size(image) == (4032, 2268)
-    @test LibRaw.output_size(image) == (4032, 2268)
+    @test LibRaw.raw_size(image) == (2268, 4032)
+    @test LibRaw.size(image) == (2268, 4032)
+    @test LibRaw.output_size(image) == (2268, 4032)
     @test LibRaw.iso_speed(image) ≈ 200.0
     @test isapprox(LibRaw.shutter_speed(image), 0.06666666, atol=1e-6)
     @test isapprox(LibRaw.aperture(image), 1.7000000, atol=1e-6)
@@ -28,5 +28,8 @@ end
     data = LibRaw.image_data(image)
 
     @test size(data) == (2268, 4032, 4)
-    @test axes(b, 3) == Axis{:color}([:R, :G, :B, :G1])
+    @test axes(data, 3) == Axis{:color}([:R, :G1, :B, :G2])
+    @test data[1, 2, :R] == 0x0042
+    @test data[3, 2, :R] == 0x0047
+    @test data[2, 3, :R] == 0x0000
 end

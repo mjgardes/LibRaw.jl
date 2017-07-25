@@ -1,8 +1,7 @@
 module LibRaw
 using AxisArrays
-using Cxx
 
-export LibRawImage, libraw_version
+export libraw_version, LibRawImage
 
 if isfile(joinpath(Pkg.dir("LibRaw"),"deps","deps.jl"))
     include(joinpath(Pkg.dir("LibRaw"),"deps","deps.jl"))
@@ -10,17 +9,15 @@ else
     error("LibRaw not properly installed. Please run Pkg.build(\"LibRaw\")")
 end
 
-const headerdir = joinpath(dirname(dirname(libraw)), "include", "libraw")
-Cxx.addHeaderDir(headerdir, kind=Cxx.C_User)
-Cxx.cxxinclude("libraw.h")
-Libdl.dlopen(libraw, Libdl.RTLD_GLOBAL)
+macro lintpragma(s) end
 
-const libraw_version = let v=@cxx LibRaw::version()
+@lintpragma("Ignore use of undeclared variable ccall")
+@lintpragma("Ignore use of undeclared variable libraw")
+@lintpragma("Ignore use of undeclared variable libraw_interface")
+
+const libraw_version = let v=ccall((:libraw_version, libraw), Cstring, ())
     VersionNumber(unsafe_string(v))
 end
-
-# const supported_cameras = let n = @cxx LibRaw::cameraCount(), strings = @
-#     n = 
 
 type LibRawImage
     filename::String
@@ -29,60 +26,73 @@ type LibRawImage
 end
 
 LibRawImage(path::String; open=true) = begin
-    ptr = @cxxnew LibRaw()
+    ptr = @eval ccall((:libraw_init, $libraw), Ptr{Void}, (Cuint,), 0)
     result = LibRawImage(path, ptr, false)
     if open
-        err = @cxx ptr->open_file(Base.unsafe_convert(Ptr{UInt8}, path))
+        err = @eval ccall((:libraw_open_file, $libraw), Cint, (Ptr{Void}, Cstring),
+                          $ptr, $path)
         err ≠ 0 && error("Got error code $err when opening file $path")
     end
     result
 end
 
-cxx"""
-char const * _c_make(void *x) { return ((LibRaw*)x)->imgdata.idata.make; }
-char const * _c_model(void *x) { return ((LibRaw*)x)->imgdata.idata.model; }
-char const * _c_cdesc(void *x) { return ((LibRaw*)x)->imgdata.idata.cdesc; }
-int64_t _c_raw_width(void *x) { return ((LibRaw*)x)->imgdata.sizes.raw_width; }
-int64_t _c_raw_height(void *x) { return ((LibRaw*)x)->imgdata.sizes.raw_height; }
-int64_t _c_width(void *x) { return ((LibRaw*)x)->imgdata.sizes.width; }
-int64_t _c_height(void *x) { return ((LibRaw*)x)->imgdata.sizes.height; }
-int64_t _c_iwidth(void *x) { return ((LibRaw*)x)->imgdata.sizes.iwidth; }
-int64_t _c_iheight(void *x) { return ((LibRaw*)x)->imgdata.sizes.iheight; }
-double _c_iso_speed(void *x) { return ((LibRaw*)x)->imgdata.other.iso_speed; }
-double _c_shutter(void *x) { return ((LibRaw*)x)->imgdata.other.shutter; }
-double _c_aperture(void *x) { return ((LibRaw*)x)->imgdata.other.aperture; }
-double _c_focal_length(void *x) { return ((LibRaw*)x)->imgdata.other.focal_len; }
-int _c_unpack(void *x) { return ((LibRaw*)x)->unpack(); }
-int _c_raw2image(void *x) { return ((LibRaw*)x)->raw2image(); }
-unsigned short* _c_image(void *x) { return &(((LibRaw*)x)->imgdata.image[0][0]); }
-"""
-
 """ Make of the camera """
-make(x::LibRawImage) = unsafe_string(@cxx _c_make(x.ptr))
-""" Model of the camera """
-model(x::LibRawImage) = unsafe_string(@cxx _c_model(x.ptr))
-""" Description of the Bayer mosaic """
-color_description(x::LibRawImage) = unsafe_string(@cxx _c_cdesc(x.ptr))
-raw_size(x::LibRawImage) = (@cxx _c_raw_width(x.ptr)), (@cxx _c_raw_height(x.ptr))
-Base.size(x::LibRawImage) = (@cxx _c_width(x.ptr)), (@cxx _c_height(x.ptr))
-output_size(x::LibRawImage) = (@cxx _c_iwidth(x.ptr)), (@cxx _c_iheight(x.ptr))
-iso_speed(x::LibRawImage) = (@cxx _c_iso_speed(x.ptr))
-shutter_speed(x::LibRawImage) = @cxx _c_shutter(x.ptr)
-aperture(x::LibRawImage) = (@cxx _c_aperture(x.ptr))
-focal_length(x::LibRawImage) = (@cxx _c_focal_length(x.ptr))
+make(x::LibRawImage) = begin
+    result = @eval ccall((:make, $libraw_interface), Cstring, (Ptr{Void}, ), $(x.ptr))
+    unsafe_string(result)
+end
 
+""" Model of the camera """
+model(x::LibRawImage) = begin
+    result = @eval ccall((:model, $libraw_interface), Cstring, (Ptr{Void}, ), $(x.ptr))
+    unsafe_string(result)
+end
+
+""" Description of the Bayer mosaic """
+color_description(x::LibRawImage) = begin
+    result = @eval ccall((:cdesc, $libraw_interface), Cstring, (Ptr{Void}, ), $(x.ptr))
+    unsafe_string(result)
+end
+
+raw_size(x::LibRawImage) = begin
+    w = @eval ccall((:raw_width, $libraw_interface), Int64, (Ptr{Void}, ), $(x.ptr))
+    h = @eval ccall((:raw_height, $libraw_interface), Int64, (Ptr{Void}, ), $(x.ptr))
+    h, w
+end
+
+Base.size(x::LibRawImage) = begin
+    w = @eval ccall((:width, $libraw_interface), Int64, (Ptr{Void}, ), $(x.ptr))
+    h = @eval ccall((:height, $libraw_interface), Int64, (Ptr{Void}, ), $(x.ptr))
+    h, w
+end
+
+output_size(x::LibRawImage) = begin
+    w = @eval ccall((:iwidth, $libraw_interface), Int64, (Ptr{Void}, ), $(x.ptr))
+    h = @eval ccall((:iheight, $libraw_interface), Int64, (Ptr{Void}, ), $(x.ptr))
+    h, w
+end
+
+iso_speed(x::LibRawImage) =
+    @eval ccall((:iso_speed, $libraw_interface), Cdouble, (Ptr{Void}, ), $(x.ptr))
+shutter_speed(x::LibRawImage) =
+    @eval ccall((:shutter, $libraw_interface), Cdouble, (Ptr{Void}, ), $(x.ptr))
+aperture(x::LibRawImage) =
+    @eval ccall((:aperture, $libraw_interface), Cdouble, (Ptr{Void}, ), $(x.ptr))
+focal_length(x::LibRawImage) =
+    @eval ccall((:focal_length, $libraw_interface), Cdouble, (Ptr{Void}, ), $(x.ptr))
+ 
 image_data(x::LibRawImage) = begin
-    width, height = output_size(x)
+    height, width = output_size(x)
 
     if !x.isunpacked
-        err = @cxx _c_unpack(x.ptr)
+        err = @eval ccall((:libraw_unpack, $libraw), Cint, (Ptr{Void}, ), $(x.ptr))
         err == 0 || err("Error code $error recovered while unpacking image")
         x.isunpacked = true
     end
-    err = @cxx _c_raw2image(x.ptr)
+    err = @eval ccall((:libraw_raw2image, $libraw), Cint, (Ptr{Void}, ), $(x.ptr))
     err == 0 || err("Error code $error recovered while unpacking image")
 
-    raw = @cxx _c_image(x.ptr)
+    raw = @eval ccall((:image, $libraw_interface), Ptr{Cushort}, (Ptr{Void}, ), $(x.ptr))
     raw == C_NULL && error("Could not recover image data")
     result = unsafe_wrap(Array{Cushort, 3}, raw, (4, width, height))
 
@@ -90,7 +100,7 @@ image_data(x::LibRawImage) = begin
     name(input) = begin
         i, x = input
         n = count(j -> j == x, cdesc[1:i-1])
-        n == 0 ? Symbol(x): Symbol(string(x) * string(n + 1))
+        count(j -> j == x, cdesc) == 1 ? Symbol(x): Symbol("$x$(n + 1)")
     end
     axis = map(name, enumerate(cdesc))
     AxisArray(permutedims(result, [3, 2, 1]),
