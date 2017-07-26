@@ -14,7 +14,5 @@ double iso_speed(libraw_data_t *x) { return x->other.iso_speed; }
 double shutter(libraw_data_t *x) { return x->other.shutter; }
 double aperture(libraw_data_t *x) { return x->other.aperture; }
 double focal_length(libraw_data_t *x) { return x->other.focal_len; }
-// int unpack(libraw_data_t *x) { return ((LibRaw*)x)->unpack(); }
-// int raw2image(libraw_data_t *x) { return ((LibRaw*)x)->raw2image(); }
 unsigned short* image(libraw_data_t *x) { return &(x->image[0][0]); }
 }
