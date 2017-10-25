@@ -25,9 +25,19 @@ type LibRawImage
     isunpacked::Bool
 end
 
+Base.close(image::LibRawImage) = begin
+    image.ptr == C_NULL && return
+    try
+        @eval ccall((:libraw_close, $libraw), Void, (Ptr{Void},), image.ptr)
+    finally
+        image.ptr = C_NULL
+    end
+end
+
 LibRawImage(path::String; open=true) = begin
     ptr = @eval ccall((:libraw_init, $libraw), Ptr{Void}, (Cuint,), 0)
     result = LibRawImage(path, ptr, false)
+    finalizer(result, close)
     if open
         err = @eval ccall((:libraw_open_file, $libraw), Cint, (Ptr{Void}, Cstring),
                           $ptr, $path)
