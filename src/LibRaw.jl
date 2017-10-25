@@ -28,7 +28,7 @@ end
 Base.close(image::LibRawImage) = begin
     image.ptr == C_NULL && return
     try
-        @eval ccall((:libraw_close, $libraw), Void, (Ptr{Void},), image.ptr)
+        @eval ccall((:libraw_close, $libraw), Void, (Ptr{Void},), $(image.ptr))
     finally
         image.ptr = C_NULL
     end
