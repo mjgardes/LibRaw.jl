@@ -1,0 +1,4 @@
+name = "LibRaw"
+uuid = "033f27bb-86c8-45e9-b98f-f00e67155b7a"
+authors = ["Mayeul d'Avezac"]
+version = "0.1.0"
